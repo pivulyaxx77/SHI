@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 
 # 1. Налаштування сторінки
-st.set_page_config(page_title="UKRAINE RP Assistant", page_icon="UR")
+st.set_page_config(page_title="UKRAINE RP Assistant", page_icon="Лого прозорий фон.png")
 st.title("🤖 Помічник UKRAINE RP")
 
 # 2. Функція збору правил
