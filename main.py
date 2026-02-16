@@ -1,70 +1,52 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-from openai import OpenAI
+import google.generativeai as genai
 
 # Налаштування сторінки
 st.set_page_config(page_title="UKRAINE RP Assistant", page_icon="🇺🇦")
-st.title("🤖 Помічник UKRAINE RP (Emergency Hamburg)")
+st.title("🤖 Помічник UKRAINE RP")
 
-# 1. Функція для отримання правил з вашого сайту
+# 1. Отримання правил з сайту
 def get_rules_from_site():
     url = "https://ukrainerpeh.xyz/#rules"
     try:
         response = requests.get(url, timeout=10)
-        # Отримуємо текст і очищаємо від тегів
         soup = BeautifulSoup(response.text, 'html.parser')
-        # Беремо текст з основних блоків (можна уточнити теги, якщо правила в конкретних id)
-        text = soup.get_text(separator=' ', strip=True)
-        return text
-    except Exception as e:
-        return f"Помилка завантаження правил: {e}"
+        return soup.get_text(separator=' ', strip=True)
+    except:
+        return "Не вдалося завантажити правила."
 
-# 2. Ініціалізація ШІ через Secrets Streamlit
-# Переконайтеся, що ви додали OPENAI_API_KEY у Settings -> Secrets
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# 2. Налаштування Gemini (використовуємо ваш ключ із Secrets)
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Завантажуємо актуальні правила
-with st.spinner('Оновлюю правила з сайту...'):
-    current_rules = get_rules_from_site()
+current_rules = get_rules_from_site()
 
-# 3. Логіка чату
+# 3. Чат
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Відображення історії повідомлень
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Запитайте про правила UKRAINE RP..."):
+if prompt := st.chat_input("Запитайте про правила..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Промпт з вашими суворими обмеженнями
         system_instruction = f"""
-        Ти — вузькоспеціалізований помічник сервера 'UKRAINE RP' у грі Emergency Hamburg.
-        Твоя база знань — це текст з офіційного сайту: {current_rules}
-        
-        СУВОРІ ПРАВИЛА:
-        1. Відповідай ТІЛЬКИ на питання про правила сервера та RP процеси.
-        2. Якщо питання НЕ стосується правил або RP на цьому конкретному сервері, 
-           відповідай дослівно: 'Я не знаю відповіді, так як я відповідаю на питання, лише пов'язані з правилами Сервера UKRAINE RP в Emergency Hamburg'.
-        3. Не вигадуй правила, яких немає в тексті.
-        4. Відповідай українською мовою.
+        Ти — помічник сервера 'UKRAINE RP' у Emergency Hamburg. 
+        Використовуй ці правила: {current_rules[:5000]}
+        Якщо питання не про правила або не про RP на цьому сервері, відповідай: 
+        'Я не знаю відповіді, так як я відповідаю на питання, лише пов'язані з правилами Сервера UKRAINE RP в Emergency Hamburg'.
         """
         
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3 # Низька температура для точності
-        )
+        # Запит до Gemini
+        response = model.generate_content(f"{system_instruction}\n\nКористувач запитує: {prompt}")
         
-        answer = response.choices[0].message.content
+        answer = response.text
         st.markdown(answer)
         st.session_state.messages.append({"role": "assistant", "content": answer})
