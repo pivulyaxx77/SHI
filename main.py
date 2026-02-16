@@ -3,34 +3,44 @@ import requests
 from bs4 import BeautifulSoup
 import google.generativeai as genai
 
-# Налаштування сторінки
+# 1. Налаштування сторінки
 st.set_page_config(page_title="UKRAINE RP Assistant", page_icon="🇺🇦")
-st.title("🤖 Помічник сервераUKRAINE RP в EH")
 
-# 1. Отримання правил з сайту
-def get_rules_from_site():
+# Стилізація заголовка
+st.markdown("<h1 style='text-align: center; color: #0057b7;'>🤖 Помічник UKRAINE RP</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: #ffd700;'>Emergency Hamburg</h3>", unsafe_allow_html=True)
+
+# 2. Функція збору правил з сайту
+@st.cache_data(ttl=600)  # Оновлювати правила раз на 10 хвилин
+def get_rules():
     url = "https://ukrainerpeh.xyz/#rules"
     try:
         response = requests.get(url, timeout=10)
+        response.encoding = 'utf-8'
         soup = BeautifulSoup(response.text, 'html.parser')
-        # Отримуємо тільки текст, щоб не перевантажувати запит
-        return soup.get_text(separator=' ', strip=True)
-    except:
-        return "Правила сервера тимчасово недоступні."
+        # Видаляємо скрипти та непотрібні теги
+        for script in soup(["script", "style"]):
+            script.decompose()
+        text = soup.get_text(separator=' ', strip=True)
+        return text
+    except Exception as e:
+        return f"Помилка завантаження правил: {e}"
 
-# 2. Налаштування Gemini
+# 3. Перевірка API ключа в Secrets
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("Будь ласка, додайте GOOGLE_API_KEY у Secrets!")
+    st.error("❌ Помилка: Не знайдено API ключ у налаштуваннях Secrets!")
+    st.info("Будь ласка, додайте GOOGLE_API_KEY у вкладці Secrets вашого Streamlit Cloud.")
     st.stop()
 
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Налаштування моделі
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error(f"❌ Помилка конфігурації ШІ: {e}")
+    st.stop()
 
-# Завантажуємо правила (кешуємо, щоб не завантажувати щоразу)
-if "rules_text" not in st.session_state:
-    st.session_state.rules_text = get_rules_from_site()
-
-# 3. Чат
+# 4. Логіка чату
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -39,34 +49,18 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Поле вводу
-if prompt := st.chat_input("Запитайте про правила UKRAINE RP..."):
-    # Додаємо повідомлення користувача
+# Поле вводу користувача
+if prompt := st.chat_input("Напишіть ваше запитання про правила..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Відповідь ШІ
     with st.chat_message("assistant"):
-        with st.spinner("Думаю..."):
+        with st.spinner("Звіряюся з правилами..."):
+            rules_context = get_rules()
+            
             system_instruction = f"""
-            Ти — помічник сервера 'UKRAINE RP' у грі Emergency Hamburg. 
-            Твоя база знань: {st.session_state.rules_text[:10000]}
+            Ти — офіційний ШІ-помічник сервера 'UKRAINE RP' у грі Emergency Hamburg. 
+            Твоє завдання — допомагати гравцям розуміти правила.
             
-            ПРАВИЛО: Якщо питання не стосується правил сервера або RP, відповідай: 
-            'Я не знаю відповіді, так як я відповідаю на питання, лише пов'язані з правилами Сервера UKRAINE RP в Emergency Hamburg'.
-            """
-            
-            try:
-                # Змінено формат запиту для стабільності
-                full_prompt = f"{system_instruction}\n\nКористувач запитує: {prompt}"
-                response = model.generate_content(full_prompt)
-                
-                if response and response.text:
-                    answer = response.text
-                    st.markdown(answer)
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                else:
-                    st.error("ШІ не зміг згенерувати відповідь. Спробуйте ще раз.")
-            except Exception as e:
-                st.error(f"Виникла помилка: {e}")
+            Ось текст правил з нашого сайту: {rules_context[:8000]}
