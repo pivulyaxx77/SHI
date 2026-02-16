@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>RP Rules AI</title>
+</head>
+<body>
+
+<h2>Запитай про правила сервера</h2>
+
+<input id="q" placeholder="Напиши питання..." style="width:300px;">
+<button onclick="ask()">Запитати</button>
+
+<p id="a"></p>
+
+<script>
+async function ask(){
+  const question = document.getElementById("q").value;
+
+  const res = await fetch("/ask", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({question})
+  });
+
+  const data = await res.json();
+  document.getElementById("a").innerText = data.answer || data.error;
+}
+</script>
+
+</body>
+</html>
